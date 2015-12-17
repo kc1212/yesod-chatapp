@@ -18,5 +18,5 @@ cabal.sandbox.config
 *.keter
 
 client_session_key.aes
-user.db3
+user.db3*
 
