@@ -30,9 +30,11 @@ User
 |]
 
 mkYesod "App" [parseRoutes|
-    /           HomeR       GET     POST
-    /auth       AuthR       Auth getAuth
-    /register   RegisterR   POST -- better to be under AuthR
+    /           HomeR       GET
+    /auth       AuthR       Auth    getAuth
+    /register   RegisterR   POST    -- TODO make this a dispatch of HashDB
+    /admin      AdminR      POST
+    /chat       ChatR       GET
 |]
 
 adminName :: Text
@@ -45,7 +47,13 @@ data App = App
 
 instance Yesod App where
     authRoute _ = Just $ AuthR LoginR
-    isAuthorized HomeR True = isAdmin -- only admin can POST in HomeR
+    isAuthorized AdminR _   = isAdmin
+    isAuthorized ChatR _   = isLoggedIn
+    isAuthorized (AuthR LoginR) _ = do
+        auth <- isLoggedIn
+        case auth of
+            Authorized -> return $ Unauthorized "Please logout first."
+            otherwise  -> return Authorized
     isAuthorized _ _ = return Authorized
 
 instance RenderMessage App FormMessage where
@@ -64,13 +72,16 @@ instance YesodAuth App where
     type AuthId App = UserId
     loginDest _ = HomeR
     logoutDest _ = HomeR
-    authPlugins _ = [ HDB.authHashDB (Just . UniqueUser) ]
-    getAuthId creds = HDB.getAuthIdHashDB AuthR (Just . UniqueUser) creds
+    authPlugins _ = [ HDB.authHashDBWithForm loginWidget (Just . UniqueUser) ]
+    getAuthId = HDB.getAuthIdHashDB AuthR (Just . UniqueUser)
     authHttpManager = httpManager
 
 instance HDB.HashDBUser User where
     userPasswordHash = Just . userPassword
     setPasswordHash h u = u { userPassword = h }
+
+loginWidget :: Route App -> Widget
+loginWidget action = $(whamletFile "loginform.hamlet")
 
 registerSucc :: User -> Handler ()
 registerSucc user = do
@@ -99,7 +110,7 @@ getHomeR = do
             $maybe name <- maUser
                 <p>Hello #{name}, you're logged in.
                 $if name == adminName
-                    <form method=post>
+                    <form method=post action=@{AdminR}>
                         <button>Delete messages
                         (Admin only)
                 <p>
@@ -111,11 +122,17 @@ getHomeR = do
                 ^{registerWidget widget enctype}
         |]
 
-postHomeR :: Handler ()
-postHomeR = do
+getChatR :: Handler Html
+getChatR = do
+    defaultLayout
+        [whamlet| welcome! |]
+
+postAdminR :: Handler ()
+postAdminR = do
     setMessage "Done."
     redirect HomeR
 
+registerWidget :: Widget -> Enctype -> Widget
 registerWidget w e =
     [whamlet|
         <form method=post action=@{RegisterR} enctype=#{e}>
@@ -137,6 +154,13 @@ addUserToDB user = do
                         insert newUser >> return True
         Just _ -> return False
 
+isLoggedIn :: Handler AuthResult
+isLoggedIn = do
+    mu <- maybeAuthId
+    return $ case mu of
+        Nothing -> Unauthorized "You must be logged in."
+        otherwise -> Authorized
+
 isAdmin :: Handler AuthResult
 isAdmin = do
     mu <- maybeAuth
@@ -150,7 +174,7 @@ main :: IO ()
 main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
     man <- newManager
     runSqlConn (runMigration migrateAll) conn
-    warp 3000 $ (App conn man)
+    warp 3000 (App conn man)
 
 
 
