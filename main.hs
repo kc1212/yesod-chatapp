@@ -8,18 +8,23 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 import           Control.Monad.Logger       (runNoLoggingT)
-import           Control.Monad              (liftM)
+import           Control.Monad              (liftM, forever)
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TChan
 import           Network.HTTP.Client.Conduit (Manager, newManager)
+import           Conduit                    (($$), mapM_C)
 import           Data.Text                  (Text, append, pack)
 import           Data.Typeable              (Typeable)
+import           Data.Monoid                ((<>))
 import           Database.Persist.Sqlite
 import           Database.Persist           (persistUniqueKeys)
-import           Text.Hamlet                (shamlet)
-import           Text.Shakespeare.Text      (stext)
+import           Text.Julius                (juliusFile)
+import           Text.Lucius                (luciusFile)
 import           Yesod
 import           Yesod.Auth
 import qualified Yesod.Auth.Message         as Msg
 import qualified Yesod.Auth.HashDB          as HDB
+import           Yesod.WebSockets
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 User
@@ -37,12 +42,10 @@ mkYesod "App" [parseRoutes|
     /chat       ChatR       GET
 |]
 
-adminName :: Text
-adminName = "admin"
-
 data App = App
     { sqlBackEnd  :: SqlBackend
     , httpManager :: Manager
+    , chatChannel :: TChan Text
     }
 
 instance Yesod App where
@@ -62,7 +65,7 @@ instance RenderMessage App FormMessage where
 instance YesodPersist App where
     type YesodPersistBackend App = SqlBackend
     runDB f = do
-        App conn _ <- getYesod
+        App conn _ _ <- getYesod
         runSqlConn f conn
 
 instance YesodAuthPersist App where
@@ -73,6 +76,7 @@ instance YesodAuth App where
     loginDest _ = HomeR
     logoutDest _ = HomeR
     authPlugins _ = [ HDB.authHashDBWithForm loginWidget (Just . UniqueUser) ]
+                    where loginWidget action = $(whamletFile "loginform.hamlet")
     getAuthId = HDB.getAuthIdHashDB AuthR (Just . UniqueUser)
     authHttpManager = httpManager
 
@@ -80,8 +84,14 @@ instance HDB.HashDBUser User where
     userPasswordHash = Just . userPassword
     setPasswordHash h u = u { userPassword = h }
 
-loginWidget :: Route App -> Widget
-loginWidget action = $(whamletFile "loginform.hamlet")
+chatHandler :: Text -> WebSocketsT Handler ()
+chatHandler name = do
+    App _ _ writeChan <- getYesod
+    readChan <- liftAtomically $ dupTChan writeChan
+    race_
+        (forever $ liftAtomically (readTChan readChan) >>= sendTextData)
+        (sourceWS $$ mapM_C (\msg ->
+            liftAtomically $ writeTChan writeChan $ name <> ": " <> msg))
 
 registerSucc :: User -> Handler ()
 registerSucc user = do
@@ -103,29 +113,18 @@ postRegisterR = do
 getHomeR :: Handler Html
 getHomeR = do
     ma <- maybeAuth
-    let maUser = liftM (userName . entityVal) ma
+    let maUser = liftM nameFromEntity ma
     (widget, enctype) <- generateFormPost registerForm
-    defaultLayout
-        [whamlet|
-            $maybe name <- maUser
-                <p>Hello #{name}, you're logged in.
-                $if name == adminName
-                    <form method=post action=@{AdminR}>
-                        <button>Delete messages
-                        (Admin only)
-                <p>
-                    <a href=@{AuthR LogoutR}>Logout
-            $nothing
-                <p>
-                    <a href=@{AuthR LoginR}>Login
-                    or register below.
-                ^{registerWidget widget enctype}
-        |]
+    defaultLayout $(whamletFile "home.hamlet")
 
 getChatR :: Handler Html
 getChatR = do
-    defaultLayout
-        [whamlet| welcome! |]
+    name <- requireAuth
+    webSockets (chatHandler $ nameFromEntity name)
+    defaultLayout $ do
+        toWidget $(whamletFile "chat.hamlet")
+        toWidget $(luciusFile "chat.lucius")
+        toWidget $(juliusFile "chat.julius")
 
 postAdminR :: Handler ()
 postAdminR = do
@@ -158,7 +157,7 @@ isLoggedIn :: Handler AuthResult
 isLoggedIn = do
     mu <- maybeAuthId
     return $ case mu of
-        Nothing -> Unauthorized "You must be logged in."
+        Nothing -> Unauthorized "You must be logged in to access this page."
         otherwise -> Authorized
 
 isAdmin :: Handler AuthResult
@@ -166,15 +165,26 @@ isAdmin = do
     mu <- maybeAuth
     return $ case mu of
         Nothing -> AuthenticationRequired
-        Just x -> if (userName . entityVal) x == adminName
+        Just x -> if nameFromEntity x == adminName
                     then Authorized
-                    else Unauthorized "You must be an admin"
+                    else Unauthorized "You must be an admin."
 
 main :: IO ()
 main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
+    chan <- atomically newBroadcastTChan
     man <- newManager
     runSqlConn (runMigration migrateAll) conn
-    warp 3000 (App conn man)
+    warp 3000 (App conn man chan)
 
 
+-- helper functions
+
+adminName :: Text
+adminName = "admin"
+
+nameFromEntity :: Entity User -> Text
+nameFromEntity = userName . entityVal
+
+liftAtomically :: MonadIO m => STM a -> m a
+liftAtomically = liftIO . atomically
 

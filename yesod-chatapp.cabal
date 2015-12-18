@@ -14,7 +14,6 @@ executable         yesod-chatapp
                  , yesod                         >= 1.4.1      && < 1.5
                  , yesod-core                    >= 1.4.6      && < 1.5
                  , yesod-auth                    >= 1.4.0      && < 1.5
-                 , yesod-static                  >= 1.4.0.3    && < 1.6
                  , yesod-form                    >= 1.4.0      && < 1.5
                  , yesod-websockets              >= 0.2.4
                  , classy-prelude                >= 0.10.2
@@ -37,6 +36,7 @@ executable         yesod-chatapp
                  , data-default
                  , aeson                         >= 0.6        && < 0.10
                  , conduit                       >= 1.0        && < 2.0
+                 , conduit-combinators           >= 1.0        && < 2.0
                  , monad-logger                  >= 0.3        && < 0.4
                  , fast-logger                   >= 2.2        && < 2.5
                  , wai-logger                    >= 2.2        && < 2.3
@@ -48,3 +48,4 @@ executable         yesod-chatapp
                  , time
                  , yesod-auth-hashdb             >= 1.4.2
                  , pwstore-fast                  >= 2.0
+                 , stm                           >= 2.4        && < 3.0

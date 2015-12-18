@@ -1,0 +1,20 @@
+#container {
+  float:left;
+  height:   400px;
+  width:    250px;
+  padding:  3px;
+}
+#output {
+    height: 300px;
+    border: 1px solid black;
+    margin-bottom: 1em;
+    overflow: auto;
+    p {
+        margin: 0 0 0.5em 0;
+        padding: 0 0 0.5em 0;
+    }
+}
+#input {
+    width:  250px;
+    display: block;
+}

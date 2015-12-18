@@ -1,0 +1,13 @@
+$maybe name <- maUser
+    <p>Hello #{name}, you're logged in.
+    $if name == adminName
+        <form method=post action=@{AdminR}>
+            <button>Delete messages
+            (Admin only)
+    <p>
+        <a href=@{AuthR LogoutR}>Logout
+$nothing
+    <p>
+        <a href=@{AuthR LoginR}>Login
+        or register below.
+    ^{registerWidget widget enctype}
