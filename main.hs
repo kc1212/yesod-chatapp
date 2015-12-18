@@ -112,8 +112,9 @@ postRegisterR = do
 
 getHomeR :: Handler Html
 getHomeR = do
-    ma <- maybeAuth
-    let maUser = liftM nameFromEntity ma
+    mu <- maybeAuth
+    let mid = entityKey <$> mu
+    let name = maybe "who are u?" (userName . entityVal) mu
     (widget, enctype) <- generateFormPost registerForm
     defaultLayout $(whamletFile "home.hamlet")
 
@@ -162,10 +163,10 @@ isLoggedIn = do
 
 isAdmin :: Handler AuthResult
 isAdmin = do
-    mu <- maybeAuth
+    mu <- maybeAuthId
     return $ case mu of
         Nothing -> AuthenticationRequired
-        Just x -> if nameFromEntity x == adminName
+        Just x -> if authIdIsAdmin x
                     then Authorized
                     else Unauthorized "You must be an admin."
 
@@ -178,9 +179,8 @@ main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
 
 
 -- helper functions
-
-adminName :: Text
-adminName = "admin"
+authIdIsAdmin :: UserId -> Bool
+authIdIsAdmin x = fromSqlKey x == 1
 
 nameFromEntity :: Entity User -> Text
 nameFromEntity = userName . entityVal
