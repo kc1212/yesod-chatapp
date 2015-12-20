@@ -7,17 +7,20 @@
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE DeriveGeneric              #-}
 import           Control.Monad.Logger       (runNoLoggingT)
 import           Control.Monad              (liftM, forever)
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Network.HTTP.Client.Conduit (Manager, newManager)
 import           Conduit                    (($$), mapM_C)
+import           Data.Aeson
 import           Data.Text                  (Text, append, pack)
 import           Data.Typeable              (Typeable)
 import           Data.Monoid                ((<>))
 import           Database.Persist.Sqlite
 import           Database.Persist           (persistUniqueKeys)
+import           GHC.Generics
 import           Text.Julius                (juliusFile)
 import           Text.Lucius                (luciusFile)
 import           Yesod
@@ -25,6 +28,15 @@ import           Yesod.Auth
 import qualified Yesod.Auth.Message         as Msg
 import qualified Yesod.Auth.HashDB          as HDB
 import           Yesod.WebSockets
+
+data WsMsg = WsMsg
+    { msgName :: Text
+    , msgContent :: Text
+    , msgAction :: Int
+    } deriving (Generic, Show)
+
+instance ToJSON WsMsg
+instance FromJSON WsMsg
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 User
@@ -112,9 +124,8 @@ postRegisterR = do
 
 getHomeR :: Handler Html
 getHomeR = do
-    mu <- maybeAuth
-    let mid = entityKey <$> mu
-    let name = maybe "who are u?" (userName . entityVal) mu
+    ma <- maybeAuth
+    let mName = (userName . entityVal) <$> ma
     (widget, enctype) <- generateFormPost registerForm
     defaultLayout $(whamletFile "home.hamlet")
 
@@ -129,8 +140,9 @@ getChatR = do
 
 postAdminR :: Handler ()
 postAdminR = do
-    setMessage "Done."
-    redirect HomeR
+    App _ _ chan <- getYesod
+    liftAtomically (writeTChan chan ("Admin here!" :: Text))
+    redirect ChatR
 
 registerWidget :: Widget -> Enctype -> Widget
 registerWidget w e =
@@ -166,7 +178,7 @@ isAdmin = do
     mu <- maybeAuthId
     return $ case mu of
         Nothing -> AuthenticationRequired
-        Just x -> if authIdIsAdmin x
+        Just x -> if keyIsAdmin x
                     then Authorized
                     else Unauthorized "You must be an admin."
 
@@ -179,8 +191,8 @@ main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
 
 
 -- helper functions
-authIdIsAdmin :: UserId -> Bool
-authIdIsAdmin x = fromSqlKey x == 1
+keyIsAdmin :: UserId -> Bool
+keyIsAdmin x = fromSqlKey x == 1
 
 nameFromEntity :: Entity User -> Text
 nameFromEntity = userName . entityVal

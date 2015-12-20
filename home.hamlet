@@ -1,9 +1,5 @@
-$maybe x <- mid
+$maybe name <- mName
     <p>Hello #{name}, you're logged in.
-    $if authIdIsAdmin x
-        <form method=post action=@{AdminR}>
-            <button>Delete messages
-            (Admin only)
     <p>
         <a href=@{AuthR LogoutR}>Logout
 $nothing

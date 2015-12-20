@@ -2,3 +2,8 @@
     <div #output>
     <form #form>
         <input #input autofocus>
+    $if keyIsAdmin (entityKey name)
+        <br />
+        <form method=post action=@{AdminR}>
+            <button>Delete messages
+            (Admin only)
