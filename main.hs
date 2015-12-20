@@ -8,25 +8,28 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE DeriveGeneric              #-}
-import           Control.Monad.Logger       (runNoLoggingT)
-import           Control.Monad              (liftM, forever)
+import           Control.Monad.Logger           (runNoLoggingT)
+import           Control.Monad                  (liftM, forever)
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
-import           Network.HTTP.Client.Conduit (Manager, newManager)
-import           Conduit                    (($$), mapM_C)
+import           Conduit                        (($$), mapM_C)
 import           Data.Aeson
-import           Data.Text                  (Text, append, pack)
-import           Data.Typeable              (Typeable)
-import           Data.Monoid                ((<>))
+import           Data.Text                      (Text)
+import           Data.Text.Lazy                 (toStrict, fromStrict)
+import           Data.Typeable                  (Typeable)
+import           Data.Monoid                    ((<>))
 import           Database.Persist.Sqlite
-import           Database.Persist           (persistUniqueKeys)
+import           Database.Persist               (persistUniqueKeys)
 import           GHC.Generics
-import           Text.Julius                (juliusFile)
-import           Text.Lucius                (luciusFile)
+import           Network.HTTP.Client.Conduit    (Manager, newManager)
+import           Text.Blaze.Html.Renderer.Text  (renderHtml)
+import           Text.Markdown
+import           Text.Julius                    (juliusFile)
+import           Text.Lucius                    (luciusFile)
 import           Yesod
 import           Yesod.Auth
-import qualified Yesod.Auth.Message         as Msg
-import qualified Yesod.Auth.HashDB          as HDB
+import qualified Yesod.Auth.Message             as Msg
+import qualified Yesod.Auth.HashDB              as HDB
 import           Yesod.WebSockets
 
 data WsMsg = WsMsg
@@ -201,5 +204,7 @@ liftAtomically :: MonadIO m => STM a -> m a
 liftAtomically = liftIO . atomically
 
 buildMsg :: Text -> Text -> Text
-buildMsg name content = toJsonText (WsMsg name content False)
+buildMsg name content =
+    toJsonText (WsMsg (f name) (f content) False)
+        where f = toStrict . renderHtml . markdown def . fromStrict -- not elegant
 

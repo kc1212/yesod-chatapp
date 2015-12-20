@@ -1,17 +1,17 @@
 #container {
-  float:left;
-  height:   400px;
-  width:    250px;
-  padding:  3px;
+    float:left;
+    height:   600px;
+    width:    250px;
+    padding:  0.1em;
 }
 #output {
-    height: 300px;
+    height: 500px;
     border: 1px solid black;
-    margin-bottom: 1em;
+    margin-bottom: 0.5em;
+    margin-top: 0.5em;
     overflow: auto;
     p {
-        margin: 0 0 0.5em 0;
-        padding: 0 0 0.5em 0;
+        line-height:0.1em;
     }
 }
 #input {

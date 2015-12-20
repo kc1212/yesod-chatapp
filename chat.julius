@@ -14,7 +14,7 @@ conn.onmessage = function(e) {
     if (msg.msgClear === true) {
         output.innerHTML = "";
     } else {
-        p1.innerHTML = msg.msgName + ": " + msg.msgContent;
+        p1.innerHTML = msg.msgName + msg.msgContent + "<br />";
         output.appendChild(p1);
     }
 
