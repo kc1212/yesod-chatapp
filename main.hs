@@ -24,6 +24,7 @@ import           GHC.Generics
 import           Network.HTTP.Client.Conduit    (Manager, newManager)
 import           Text.Blaze.Html.Renderer.Text  (renderHtml)
 import           Text.Markdown
+import           Text.Hamlet                    (hamletFile)
 import           Text.Julius                    (juliusFile)
 import           Text.Lucius                    (luciusFile)
 import           Yesod
@@ -73,6 +74,7 @@ instance Yesod App where
             Authorized -> return $ Unauthorized "Please logout first."
             otherwise  -> return Authorized
     isAuthorized _ _ = return Authorized
+    defaultLayout = myLayout
 
 instance RenderMessage App FormMessage where
     renderMessage _ _ = defaultFormMessage
@@ -107,7 +109,7 @@ chatHandler name = do
         (forever $ liftAtomically (readTChan readChan) >>= sendTextData)
         (sourceWS $$ mapM_C (liftAtomically . writeTChan writeChan . buildMsg name))
 
-registerSucc :: User -> Handler ()
+registerSucc :: User -> Handler () -- Post/Redirect/Get
 registerSucc user = do
     succ <- addUserToDB user
     if succ
@@ -159,6 +161,14 @@ registerForm :: Html -> MForm Handler (FormResult User, Widget)
 registerForm = renderDivs $ User
     <$> areq textField "Username" Nothing
     <*> areq passwordField "Password" Nothing
+
+myLayout :: Widget -> Handler Html
+myLayout widget = do
+    ma <- maybeAuth
+    let mName = (userName . entityVal) <$> ma
+    pc <- widgetToPageContent widget
+    mmsg <- getMessage
+    withUrlRenderer $(hamletFile "layout.hamlet")
 
 addUserToDB :: User -> Handler Bool
 addUserToDB user = do

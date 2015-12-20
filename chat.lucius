@@ -1,5 +1,4 @@
 #container {
-    float:left;
     height:   600px;
     width:    250px;
     padding:  0.1em;

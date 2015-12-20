@@ -1,0 +1,16 @@
+$doctype 5
+<html>
+    <head>
+        <title>#{pageTitle pc}
+        <meta charset=utf-8>
+        ^{pageHead pc}
+    <body>
+        <a href=@{HomeR}>Home
+        $maybe name <- mName
+            <a href=@{ChatR}>Chat
+            <a href=@{AuthR LogoutR}>Logout (#{name})
+        $nothing
+            <a href=@{AuthR LoginR}>Login
+        $maybe msg <- mmsg
+            <p>Message: #{msg}
+        ^{pageBody pc}

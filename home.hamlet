@@ -1,7 +1,5 @@
 $maybe name <- mName
-    <p>Hello #{name}, you're logged in.
-    <p>
-        <a href=@{AuthR LogoutR}>Logout
+    <p>Hello #{name}.
 $nothing
     <p>
         <a href=@{AuthR LoginR}>Login
