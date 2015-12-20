@@ -68,13 +68,15 @@ instance Yesod App where
     authRoute _ = Just $ AuthR LoginR
     isAuthorized AdminR _   = isAdmin
     isAuthorized ChatR _   = isLoggedIn
-    isAuthorized (AuthR LoginR) _ = do
-        auth <- isLoggedIn
-        case auth of
-            Authorized -> return $ Unauthorized "Please logout first."
-            otherwise  -> return Authorized
+    isAuthorized (AuthR LoginR) _ = isNotLoggedIn
     isAuthorized _ _ = return Authorized
-    defaultLayout = myLayout
+    defaultLayout = layout
+        where layout widget = do
+                ma <- maybeAuth
+                let mName = (userName . entityVal) <$> ma
+                pc <- widgetToPageContent widget
+                mmsg <- getMessage
+                withUrlRenderer $(hamletFile "layout.hamlet")
 
 instance RenderMessage App FormMessage where
     renderMessage _ _ = defaultFormMessage
@@ -162,14 +164,6 @@ registerForm = renderDivs $ User
     <$> areq textField "Username" Nothing
     <*> areq passwordField "Password" Nothing
 
-myLayout :: Widget -> Handler Html
-myLayout widget = do
-    ma <- maybeAuth
-    let mName = (userName . entityVal) <$> ma
-    pc <- widgetToPageContent widget
-    mmsg <- getMessage
-    withUrlRenderer $(hamletFile "layout.hamlet")
-
 addUserToDB :: User -> Handler Bool
 addUserToDB user = do
     maybeUser <- runDB $ getBy (UniqueUser (userName user))
@@ -184,6 +178,13 @@ isLoggedIn = do
     mu <- maybeAuthId
     return $ case mu of
         Nothing -> Unauthorized "You must be logged in to access this page."
+        otherwise -> Authorized
+
+isNotLoggedIn :: Handler AuthResult
+isNotLoggedIn = do
+    auth <- isLoggedIn
+    return $ case auth of
+        Authorized -> Unauthorized "Please logout first."
         otherwise -> Authorized
 
 isAdmin :: Handler AuthResult

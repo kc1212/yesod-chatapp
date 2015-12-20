@@ -4,5 +4,7 @@ $nothing
     <p>
         <a href=@{AuthR LoginR}>Login
         or register below.
-    ^{registerWidget widget enctype}
+    <form method=post action=@{RegisterR} enctype=#{enctype}>
+        ^{widget}
+        <button>Submit
 
