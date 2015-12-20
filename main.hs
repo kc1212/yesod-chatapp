@@ -32,7 +32,7 @@ import           Yesod.WebSockets
 data WsMsg = WsMsg
     { msgName :: Text
     , msgContent :: Text
-    , msgAction :: Int
+    , msgClear :: Bool
     } deriving (Generic, Show)
 
 instance ToJSON WsMsg
@@ -102,8 +102,7 @@ chatHandler name = do
     readChan <- liftAtomically $ dupTChan writeChan
     race_
         (forever $ liftAtomically (readTChan readChan) >>= sendTextData)
-        (sourceWS $$ mapM_C (\msg ->
-            liftAtomically $ writeTChan writeChan $ name <> ": " <> msg))
+        (sourceWS $$ mapM_C (liftAtomically . writeTChan writeChan . buildMsg name))
 
 registerSucc :: User -> Handler ()
 registerSucc user = do
@@ -141,7 +140,8 @@ getChatR = do
 postAdminR :: Handler ()
 postAdminR = do
     App _ _ chan <- getYesod
-    liftAtomically (writeTChan chan ("Admin here!" :: Text))
+    let msg = toJsonText (WsMsg "" "" True)
+    liftAtomically (writeTChan chan msg)
     redirect ChatR
 
 registerWidget :: Widget -> Enctype -> Widget
@@ -199,4 +199,7 @@ nameFromEntity = userName . entityVal
 
 liftAtomically :: MonadIO m => STM a -> m a
 liftAtomically = liftIO . atomically
+
+buildMsg :: Text -> Text -> Text
+buildMsg name content = toJsonText (WsMsg name content False)
 
