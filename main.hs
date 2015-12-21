@@ -14,7 +14,7 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TChan
 import           Conduit                        (($$), mapM_C)
 import           Data.Aeson
-import           Data.Text                      (Text)
+import           Data.Text                      (Text, pack)
 import           Data.Text.Lazy                 (toStrict, fromStrict)
 import           Data.Typeable                  (Typeable)
 import           Data.Monoid                    ((<>))
@@ -22,6 +22,7 @@ import           Database.Persist.Sqlite
 import           Database.Persist               (persistUniqueKeys)
 import           GHC.Generics
 import           Network.HTTP.Client.Conduit    (Manager, newManager)
+import           System.Environment             (getEnv)
 import           Text.Blaze.Html.Renderer.Text  (renderHtml)
 import           Text.Markdown
 import           Text.Hamlet                    (hamletFile)
@@ -59,12 +60,14 @@ mkYesod "App" [parseRoutes|
 |]
 
 data App = App
-    { sqlBackEnd  :: SqlBackend
+    { envApproot  :: Text
+    , sqlBackEnd  :: SqlBackend
     , httpManager :: Manager
     , chatChannel :: TChan Text
     }
 
 instance Yesod App where
+    approot = ApprootMaster envApproot
     authRoute _ = Just $ AuthR LoginR
     isAuthorized AdminR _   = isAdmin
     isAuthorized ChatR _   = isLoggedIn
@@ -84,7 +87,7 @@ instance RenderMessage App FormMessage where
 instance YesodPersist App where
     type YesodPersistBackend App = SqlBackend
     runDB f = do
-        App conn _ _ <- getYesod
+        App _ conn _ _ <- getYesod
         runSqlConn f conn
 
 instance YesodAuthPersist App where
@@ -105,7 +108,7 @@ instance HDB.HashDBUser User where
 
 chatHandler :: Text -> WebSocketsT Handler ()
 chatHandler name = do
-    App _ _ writeChan <- getYesod
+    App _ _ _ writeChan <- getYesod
     readChan <- liftAtomically $ dupTChan writeChan
     race_
         (forever $ liftAtomically (readTChan readChan) >>= sendTextData)
@@ -146,7 +149,7 @@ getChatR = do
 
 postAdminR :: Handler ()
 postAdminR = do
-    App _ _ chan <- getYesod
+    App _ _ _ chan <- getYesod
     let msg = toJsonText (WsMsg "" "" True)
     liftAtomically (writeTChan chan msg)
     redirect ChatR
@@ -198,10 +201,11 @@ isAdmin = do
 
 main :: IO ()
 main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
+    approot <- pack <$> getEnv "APPROOT" -- TODO sanity check
     chan <- atomically newBroadcastTChan
     man <- newManager
     runSqlConn (runMigration migrateAll) conn
-    warp 3000 (App conn man chan)
+    warp 3000 (App approot conn man chan)
 
 
 -- helper functions
