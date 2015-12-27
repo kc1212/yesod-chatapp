@@ -13,7 +13,7 @@ import           Control.Monad                  (forever)
 import           Control.Concurrent.STM
 import           Conduit                        (($$), mapM_C)
 import           Data.Aeson
-import           Data.Text                      (Text, pack)
+import           Data.Text                      (Text, pack, append)
 import           Data.Text.Lazy                 (toStrict, fromStrict)
 import           Data.Typeable                  (Typeable)
 import           Database.Persist.Sqlite
@@ -161,9 +161,15 @@ addUserToDB user = do
     case maybeUser of
         Nothing  -> runDB $ do
                         newUser <- HDB.setPassword (userPassword user) user
-                        _ <- insert newUser -- insert gives user ID, not needed here
+                        _ <- addUserQuery (userName newUser) (userPassword newUser)
                         return True
         Just _ -> return False
+    where addUserQuery name pw = rawExecute query []
+            where query = "insert into user (name, password) values ('"
+                    `append` name
+                    `append` "','"
+                    `append` pw
+                    `append` "');"
 
 isLoggedIn :: Handler AuthResult
 isLoggedIn = do

@@ -26,3 +26,4 @@ executable         yesod-chatapp
                  , stm                           >= 2.4        && < 3.0
                  , markdown                      >= 0.1.13     && < 0.2
                  , blaze-html                    >= 0.8.1.1    && < 0.9
+                 , mtl                           >= 2.2        && < 2.3
