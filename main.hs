@@ -9,17 +9,14 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE DeriveGeneric              #-}
 import           Control.Monad.Logger           (runNoLoggingT)
-import           Control.Monad                  (liftM, forever)
+import           Control.Monad                  (forever)
 import           Control.Concurrent.STM
-import           Control.Concurrent.STM.TChan
 import           Conduit                        (($$), mapM_C)
 import           Data.Aeson
 import           Data.Text                      (Text, pack)
 import           Data.Text.Lazy                 (toStrict, fromStrict)
 import           Data.Typeable                  (Typeable)
-import           Data.Monoid                    ((<>))
 import           Database.Persist.Sqlite
-import           Database.Persist               (persistUniqueKeys)
 import           GHC.Generics
 import           Network.HTTP.Client.Conduit    (Manager, newManager)
 import           System.Environment             (getEnv)
@@ -30,7 +27,6 @@ import           Text.Julius                    (juliusFile)
 import           Text.Lucius                    (luciusFile)
 import           Yesod
 import           Yesod.Auth
-import qualified Yesod.Auth.Message             as Msg
 import qualified Yesod.Auth.HashDB              as HDB
 import           Yesod.WebSockets
 
@@ -116,8 +112,8 @@ chatHandler name = do
 
 registerSucc :: User -> Handler () -- Post/Redirect/Get
 registerSucc user = do
-    succ <- addUserToDB user
-    if succ
+    isOk <- addUserToDB user
+    if isOk
         then setMessage "Success!, please login." >> redirect (AuthR LoginR)
         else setMessage "User name already exist, please try again." >> redirect HomeR
 
@@ -154,14 +150,6 @@ postAdminR = do
     liftAtomically (writeTChan chan msg)
     redirect ChatR
 
-registerWidget :: Widget -> Enctype -> Widget
-registerWidget w e =
-    [whamlet|
-        <form method=post action=@{RegisterR} enctype=#{e}>
-            ^{w}
-            <button>Submit
-    |]
-
 registerForm :: Html -> MForm Handler (FormResult User, Widget)
 registerForm = renderDivs $ User
     <$> areq textField "Username" Nothing
@@ -173,7 +161,8 @@ addUserToDB user = do
     case maybeUser of
         Nothing  -> runDB $ do
                         newUser <- HDB.setPassword (userPassword user) user
-                        insert newUser >> return True
+                        _ <- insert newUser -- insert gives user ID, not needed here
+                        return True
         Just _ -> return False
 
 isLoggedIn :: Handler AuthResult
@@ -181,14 +170,14 @@ isLoggedIn = do
     mu <- maybeAuthId
     return $ case mu of
         Nothing -> Unauthorized "You must be logged in to access this page."
-        otherwise -> Authorized
+        _       -> Authorized
 
 isNotLoggedIn :: Handler AuthResult
 isNotLoggedIn = do
     auth <- isLoggedIn
     return $ case auth of
-        Authorized -> Unauthorized "Please logout first."
-        otherwise -> Authorized
+        Authorized  -> Unauthorized "Please logout first."
+        _           -> Authorized
 
 isAdmin :: Handler AuthResult
 isAdmin = do
@@ -201,11 +190,11 @@ isAdmin = do
 
 main :: IO ()
 main = runNoLoggingT $ withSqliteConn "user.db3" $ \conn -> liftIO $ do
-    approot <- pack <$> getEnv "APPROOT" -- TODO sanity check
+    root <- pack <$> getEnv "APPROOT" -- TODO sanity check
     chan <- atomically newBroadcastTChan
     man <- newManager
     runSqlConn (runMigration migrateAll) conn
-    warp 3000 (App approot conn man chan)
+    warp 3000 (App root conn man chan)
 
 
 -- helper functions
@@ -221,5 +210,8 @@ liftAtomically = liftIO . atomically
 buildMsg :: Text -> Text -> Text
 buildMsg name content =
     toJsonText (WsMsg (f name) (f content) False)
-        where f = toStrict . renderHtml . markdown def . fromStrict -- not elegant
+        where f = toStrict
+                  . renderHtml
+                  . markdown def
+                  . fromStrict
 
