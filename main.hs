@@ -212,6 +212,6 @@ buildMsg name content =
     toJsonText (WsMsg (f name) (f content) False)
         where f = toStrict
                   . renderHtml
-                  . markdown def
+                  . markdown def { msXssProtect = False }
                   . fromStrict
 
