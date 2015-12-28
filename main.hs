@@ -122,7 +122,7 @@ registerFail = setMessage "Critical Error!" >> redirect HomeR
 
 postRegisterR :: Handler ()
 postRegisterR = do
-    ((result, widget), enctype) <- runFormPost registerForm
+    ((result, widget), enctype) <- runFormPostNoToken registerForm
     case result of
         FormSuccess user -> registerSucc user
         _ -> registerFail
